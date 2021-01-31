@@ -33,5 +33,6 @@ class Users(commands.Cog):
             embed.set_image(url=user.avatar_url)
         await ctx.send(embed=embed)
 
+
 def setup(client):
     client.add_cog(Users(client))
