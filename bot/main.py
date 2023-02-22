@@ -1,79 +1,127 @@
-# TODO - transfer, casino, etc commands
 from itertools import cycle
+
+import sys
+import logging
 import discord
+from aiohttp import ClientSession
+from loguru import logger
 from discord.ext import commands, tasks
-# Standard modules
-# TOKEN, MONGO URI are env-vars
+
 from utils import get_environment_variable
-DISCORD_BOT_TOKEN = get_environment_variable("DISCORD_BOT_TOKEN")
+
 # intents (new discord feature to limit bots to certain bucket events)
 intents = discord.Intents.default()
 
-# NOTE- The initial version of the bot used TinyDB, but I've migrated to
-# MongoDB (still considering sql tho)
-# client pointer for API-reference
-client = commands.Bot(command_prefix='qq ',
-                      case_insensitive=True, intents=intents)
-# discord.py has an inbuilt help command, which doesn't look good''
-client.remove_command('help')
-# status-change-cycle(The bot changes presence after a few mins.)
-STATUS = cycle([
-    "qq help | :(",
-    "with your heart",
-    "in tears",
-    "with tears",
-    "with your soul",
-    "I'm so sad",
-    "with your tears...",
-    "with your feelings",
-    "with sparkles"])
-ls_cog = ['cogs.fun_cog',
-          'cogs.ping_cog',
-          'cogs.help_cog',
-          'cogs.coffee_cog',
-          'cogs.meme_cog',
-          'cogs.utils_cog',
-          'cogs.name_cog',
-          'cogs.game_cog',
-          'cogs.economy_cog',
-          'cogs.events_cog',
-          'cogs.error_cog',
-          'cogs.users_cog',
-          'cogs.comic_cog',
-          'jishaku']
+
+# remove default help command
+# TODO - Use Sub-classsing from inbuilt command to re-build this.
+# client.remove_command("help")
+
+# _close = client.close
 
 
-@client.event
-async def on_ready():
-    '''
-    This prints a message when the on_ready event is detected.
-    That is, when the bot logs onto discord when the script is ran.
-    '''
-    change_status.start()  # Triggers status change task
-    print("Processing.....")
-    print("|||||||||||||||")
-    print("Bot has Successfully logged onto Discord...")
-    print('Successfully logged in as {0.user}...'.format(client))
-    # client.user gives the bots discord username tag
+# async def close():
+#     logger.info("Logging out...")
+#     await _close()
+#     if client.session:
+#         logger.info("Closing aiohttp.ClientSession")
+#         await client.session.close()
+
+
+# client.close = close
+
+d_logger = logging.getLogger("discord")
+d_logger.setLevel(logging.DEBUG)
+handler = logging.FileHandler(filename="discord.log", encoding="utf-8", mode="w")
+handler.setFormatter(
+    logging.Formatter("%(asctime)s:%(levelname)s:%(name)s: %(message)s")
+)
+d_logger.addHandler(handler)
+
+logger.add(
+    "discord.log", format="{time} {level} {message}", level="DEBUG", rotation="5 MB"
+)
+logger.info("Logging Process Started...")
+
+STATUS = cycle(
+    [
+        "qq help | :(",
+        "with your heart",
+        "in tears",
+        "with tears",
+        "with your soul",
+        "I'm so sad",
+        "with your tears...",
+        "with your feelings",
+        "with sparkles",
+    ]
+)
+
+COGS = [
+    "cogs.coffee",
+    "cogs.comic",
+    "cogs.error",
+    "cogs.help",
+    "cogs.game",
+    "cogs.meme",
+    "cogs.users",
+    "cogs.utilities",
+    "cogs.ping",
+    "cogs.events",
+    "cogs.economy",
+    "cogs.fun",
+    "cogs.name",
+]
 
 
 @tasks.loop(seconds=600)
 async def change_status():
-    '''
-    loops through the cycle of the STATUS list and sets that as bot presence
-    '''
-    await client.change_presence(activity=discord.Game(next(STATUS)))
-    # NOTE- There are other methods, that can be utilised instead of just
-    # 'playing'
+    """
+    Change bot presence, based on the STATUS cycle
+    """
+    await bot.change_presence(activity=discord.Game(next(STATUS)))
 
-# cog-loader
+
+CLIENT_ID = get_environment_variable("CLIENT_ID")
+
+
+class Bot(commands.Bot):
+    def __init__(self):
+        super().__init__(
+            command_prefix="qq",
+            case_insensitive=True,
+            application_id=CLIENT_ID,
+            intents=intents,
+        )
+        self.session = ClientSession()
+        try:
+            self.MONGO = get_environment_variable("MONGO_CONNECTION_STRING")
+            self.TOKEN = get_environment_variable("DISCORD_BOT_TOKEN")
+        except ValueError as err:
+            logger.error(f"Environment Variables Not Found...\n{err}")
+            sys.exit()
+
+        super().remove_command("help")
+
+    async def setup_hook(self):
+        COGS.append("jishaku")
+        logger.info("Loading Cogs...")
+        for ext in COGS:
+            await self.load_extension(ext)
+            logger.info(f"Loaded cog : {ext}")
+        await bot.tree.sync()
+
+    async def on_ready(self):
+        change_status.start()  # Triggers status change task
+        logger.info("Bot has Successfully logged onto Discord...")
+        logger.info(f"Successfully logged in as {bot.user}...")
+
+
+bot = Bot()
+
 if __name__ == "__main__":
-    for extension in ls_cog:
-        client.load_extension(extension)
-        print(f'Loaded cog : {extension}')
-
     # Running the BOT:
-    if DISCORD_BOT_TOKEN != 'foo':
-        client.run(str(DISCORD_BOT_TOKEN))
+    if bot.TOKEN != "foo" and (bot.TOKEN is not None):
+        bot.run(str(bot.TOKEN))
     else:
-        print('No token Loaded')
+        logger.warning("No token Loaded")

@@ -1,8 +1,0 @@
-discord.py
-pymongo
-wikipedia
-wolframalpha
-aiohttp
-dnspython
-jishaku
-translate
